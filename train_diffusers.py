@@ -114,6 +114,16 @@ def train_epoch(model, dataloader, optimizer, device, epoch, writer, ema_model=N
         global_step = epoch * num_batches + batch_idx
         writer.add_scalar('Training/Batch_Loss', loss.item(), global_step)
         writer.add_scalar('Training/Learning_Rate', optimizer.param_groups[0]['lr'], global_step)
+        
+        # 记录梯度信息
+        if batch_idx % 100 == 0:  # 每100个batch记录一次梯度信息
+            total_norm = 0
+            for p in model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** (1. / 2)
+            writer.add_scalar('Training/Gradient_Norm', total_norm, global_step)
     
     avg_loss = total_loss / num_batches
     writer.add_scalar('Training/Epoch_Loss', avg_loss, epoch)
@@ -246,13 +256,43 @@ def main():
         if (epoch + 1) % args.save_interval == 0:
             save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_dir)
         
-        # 生成样本
+        # 记录更多训练信息到tensorboard
+        writer.add_scalar('Training/GPU_Memory_Allocated', 
+                         torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0, epoch)
+        
+        # 每个epoch都生成少量样本用于tensorboard记录
+        if epoch % max(1, args.sample_interval // 2) == 0:  # 更频繁地生成用于记录
+            print("Generating samples for monitoring...")
+            
+            # 使用原始模型生成少量样本用于tensorboard
+            quick_samples = generate_samples(model, device, num_samples=8, num_steps=25, method='euler')
+            writer.add_images('Quick_Samples/Original', (quick_samples + 1) / 2, epoch)
+            
+            # 如果使用EMA，也生成EMA样本用于tensorboard
+            if ema_model is not None:
+                # 临时应用EMA参数
+                original_params = {}
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        original_params[name] = param.data.clone()
+                        param.data.copy_(ema_model.shadow[name])
+                
+                quick_samples_ema = generate_samples(model, device, num_samples=8, num_steps=25, method='euler')
+                writer.add_images('Quick_Samples/EMA', (quick_samples_ema + 1) / 2, epoch)
+                
+                # 恢复原始参数
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        param.data.copy_(original_params[name])
+        
+        # 生成高质量样本保存到文件
         if (epoch + 1) % args.sample_interval == 0:
-            print("Generating samples...")
+            print("Generating high-quality samples...")
             
             # 使用原始模型生成
             samples = generate_samples(model, device, num_samples=16)
             save_images(samples, f'samples_diffusers/epoch_{epoch}_original.png', nrow=4)
+            writer.add_images('High_Quality_Samples/Original', (samples + 1) / 2, epoch)
             
             # 如果使用EMA，也生成EMA模型的样本
             if ema_model is not None:
@@ -265,14 +305,12 @@ def main():
                 
                 samples_ema = generate_samples(model, device, num_samples=16)
                 save_images(samples_ema, f'samples_diffusers/epoch_{epoch}_ema.png', nrow=4)
+                writer.add_images('High_Quality_Samples/EMA', (samples_ema + 1) / 2, epoch)
                 
                 # 恢复原始参数
                 for name, param in model.named_parameters():
                     if param.requires_grad:
                         param.data.copy_(original_params[name])
-            
-            # 添加样本到tensorboard
-            writer.add_images('Generated_Samples', (samples + 1) / 2, epoch)
     
     # 保存最终模型
     save_checkpoint(model, optimizer, args.epochs - 1, best_loss, 

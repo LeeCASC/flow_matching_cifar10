@@ -1,5 +1,12 @@
+# 基本PyTorch（CPU版本）- 用于基本安装
 torch>=2.0.0
 torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# 注意：如果要使用GPU，请运行以下命令之一：
+# CUDA 11.8: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# CUDA 12.1: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# 或者直接运行: python install_gpu.py
 numpy>=1.24.0
 matplotlib>=3.6.0
 tqdm>=4.64.0

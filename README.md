@@ -19,20 +19,36 @@
 
 ### 1. 安装依赖
 
+#### 方法A：自动安装GPU版本（推荐）
+```bash
+python install_gpu.py
+```
+
+#### 方法B：手动安装
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 快速演示
+**注意**: 如果要使用GPU加速，请参考 [GPU训练指南](GPU_TRAINING_GUIDE.md)
 
-#### 方法A：使用Diffusers UNet（推荐）
+### 2. 一键启动（超级简单！）
+
 ```bash
-python demo_diffusers.py
+# 自动检测GPU配置并启动训练
+python quick_start.py
+
+# 快速演示（10分钟体验）
+python quick_start.py --demo
+
+# 指定训练类别
+python quick_start.py --class_idx 3  # 训练猫的图片
 ```
 
-#### 方法B：使用自定义UNet
+### 3. 手动启动
+
+#### 快速演示
 ```bash
-python demo.py
+python demo_diffusers.py
 ```
 
 这将训练一个小型模型10个epoch并生成样本图像。
@@ -127,33 +143,48 @@ Flow Matching是一种基于连续归一化流的生成模型，其核心思想�
 
 ## 📈 训练监控
 
-使用Tensorboard监控训练过程：
+使用Tensorboard实时监控训练过程：
 
 ```bash
-tensorboard --logdir logs
+# 启动tensorboard
+tensorboard --logdir logs_diffusers
+
+# 在浏览器中打开 http://localhost:6006
 ```
 
-监控指标包括：
-- 训练损失
-- 学习率变化
-- 生成样本质量
+### 🔍 监控内容包括：
+
+#### 训练指标
+- **Training/Batch_Loss**: 每个batch的损失值
+- **Training/Epoch_Loss**: 每个epoch的平均损失  
+- **Training/Learning_Rate**: 学习率变化曲线
+- **Training/Gradient_Norm**: 梯度范数（防止梯度爆炸）
+- **Training/GPU_Memory_Allocated**: GPU内存使用情况
+
+#### 生成样本可视化
+- **Quick_Samples**: 每2-3个epoch的快速预览样本
+- **High_Quality_Samples**: 高质量生成样本展示
+- **Original vs EMA**: 对比原始模型和EMA模型的生成效果
+
+### 📊 训练进度实时跟踪
+- 损失函数收敛曲线
+- 每个epoch生成的图像质量变化
+- 模型训练稳定性指标
 
 ## 🎯 项目结构
 
 ```
 flow_matching/
-├── flow_matching.py          # 自定义U-Net的Flow Matching模型
-├── flow_matching_diffusers.py # 使用Diffusers UNet的Flow Matching模型 🌟
+├── quick_start.py            # 🚀 一键启动脚本（推荐入口）
+├── flow_matching_diffusers.py # Flow Matching核心模型
 ├── utils.py                  # 工具函数和数据加载器
-├── train.py                  # 自定义UNet训练脚本
-├── train_diffusers.py        # Diffusers UNet训练脚本 🌟
-├── train_with_config.py      # 使用预定义配置的训练脚本
-├── generate.py               # 生成脚本  
-├── demo.py                   # 自定义UNet演示脚本
-├── demo_diffusers.py         # Diffusers UNet演示脚本 🌟
-├── config.py                 # 预定义配置文件
-├── requirements.txt          # 依赖包
-└── README.md                # 项目说明
+├── train_diffusers.py        # GPU训练脚本
+├── generate.py               # 图像生成脚本
+├── demo_diffusers.py         # 快速演示脚本
+├── install_gpu.py            # GPU环境自动安装脚本
+├── requirements.txt          # 依赖包列表
+├── README.md                # 项目说明
+└── GPU_TRAINING_GUIDE.md    # GPU训练详细指南
 ```
 
 ## ⚡ 为什么推荐使用Diffusers UNet？
