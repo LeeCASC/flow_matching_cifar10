@@ -11,6 +11,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import argparse
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 from tqdm import tqdm
 import numpy as np
 import time
