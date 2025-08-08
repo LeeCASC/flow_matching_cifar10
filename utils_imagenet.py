@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import Tuple, List, Optional
 import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+os.environ['TORCH_USE_CUDA_DSA'] = '1'
 import requests
 from PIL import Image
 import json
@@ -107,12 +109,12 @@ def get_imagenet_dataloader(data_dir: str = './data/imagenet',
     
     try:
         # 检查是否有预处理的猫咪数据目录
-        cats_dir = os.path.join(data_dir, 'cats')
-        if os.path.exists(cats_dir):
+        # cats_dir = os.path.join(data_dir, 'cats')
+        if os.path.exists(data_dir):
             print("找到预处理的猫咪数据目录")
             # 使用ImageFolder加载预处理的猫咪图片
             dataset = torchvision.datasets.ImageFolder(
-                root=cats_dir,  # 直接指向cats目录
+                root=data_dir,  # 直接指向cats目录
                 transform=transform
             )
             subset = dataset
@@ -264,7 +266,7 @@ def create_checkpoint_dir(checkpoint_dir: str = 'checkpoints_imagenet') -> str:
 
 
 def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer,
-                   epoch: int, loss: float, checkpoint_dir: str):
+                   epoch: int, loss: float, checkpoint_dir: str, filename: str = None):
     """保存检查点"""
     checkpoint = {
         'model_state_dict': model.state_dict(),
@@ -273,9 +275,28 @@ def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer,
         'loss': loss,
     }
     
-    checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_epoch_{epoch}.pth')
+    if filename is None:
+        checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_epoch_{epoch}.pth')
+    else:
+        checkpoint_path = os.path.join(checkpoint_dir, filename)
+    
     torch.save(checkpoint, checkpoint_path)
     print(f"保存检查点: {checkpoint_path}")
+
+
+def save_best_model_only(model: torch.nn.Module, optimizer: torch.optim.Optimizer,
+                        epoch: int, loss: float, checkpoint_dir: str):
+    """只保存最佳模型为best.unet"""
+    checkpoint = {
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'epoch': epoch,
+        'loss': loss,
+    }
+    
+    best_model_path = os.path.join(checkpoint_dir, 'best.unet')
+    torch.save(checkpoint, best_model_path)
+    print(f"💎 保存最佳模型: {best_model_path} (Epoch {epoch+1}, Loss: {loss:.4f})")
 
 
 def load_checkpoint(checkpoint_path: str, model: torch.nn.Module, 

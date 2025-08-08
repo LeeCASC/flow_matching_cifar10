@@ -16,7 +16,7 @@ import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import argparse
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 from tqdm import tqdm
 import numpy as np
 import time
@@ -32,6 +32,7 @@ from utils_imagenet import (
     get_device,
     create_checkpoint_dir,
     save_checkpoint,
+    save_best_model_only,
     load_checkpoint,
     save_images_imagenet,
     show_images_imagenet,
@@ -126,8 +127,8 @@ def parse_args():
                        help='Tensorboard日志目录 (默认: logs_imagenet_improved)')
     parser.add_argument('--samples_dir', type=str, default='samples_imagenet_improved',
                        help='生成样本目录 (默认: samples_imagenet_improved)')
-    parser.add_argument('--save_every_epoch', action='store_true', default=True,
-                       help='每个epoch都保存检查点 (默认启用)')
+    parser.add_argument('--save_every_epoch', action='store_true', default=False,
+                       help='每个epoch都保存检查点 (默认禁用，只保存最佳模型)')
     parser.add_argument('--sample_every_epoch', action='store_true', default=True,
                        help='每个epoch都生成样本 (默认启用)')
     parser.add_argument('--num_samples', type=int, default=16,
@@ -320,12 +321,17 @@ def save_epoch_samples(model, device, epoch, samples_dir, image_size, ema_model=
 
 
 def find_latest_checkpoint(checkpoint_dir):
-    """查找最新的检查点文件"""
+    """查找最新的检查点文件，优先查找best.unet"""
     checkpoint_dir = Path(checkpoint_dir)
     if not checkpoint_dir.exists():
         return None
     
-    # 查找所有检查点文件
+    # 优先查找最佳模型
+    best_model_path = checkpoint_dir / 'best.unet'
+    if best_model_path.exists():
+        return str(best_model_path)
+    
+    # 如果没有最佳模型，查找其他检查点文件
     checkpoint_files = list(checkpoint_dir.glob('**/checkpoint_epoch_*.pth'))
     if not checkpoint_files:
         return None
@@ -376,6 +382,7 @@ def main():
     print(f"使用EMA: {args.use_ema}")
     print(f"只用家猫: {args.use_domestic_only}")
     print(f"自动恢复: {args.auto_resume}")
+    print(f"磁盘节省模式: 只保存最佳模型 (best.unet)")
     print("=" * 70)
     
     # 获取设备
@@ -516,18 +523,15 @@ def main():
                 writer.add_scalar('System/Total_Time_Hours', total_time/3600, epoch)
                 writer.add_scalar('Training/Current_Learning_Rate', current_lr, epoch)
                 
-                # 保存最佳模型
+                # 只保存最佳模型为best.unet
                 if avg_loss < best_loss:
                     best_loss = avg_loss
-                    best_dir = os.path.join(checkpoint_dir, 'best')
-                    os.makedirs(best_dir, exist_ok=True)
-                    save_checkpoint(model, optimizer, epoch, avg_loss, best_dir)
-                    print(f"   💎 保存最佳模型 (损失: {best_loss:.4f})")
+                    save_best_model_only(model, optimizer, epoch, avg_loss, checkpoint_dir)
                 
-                # 每个epoch保存检查点
-                if args.save_every_epoch or (epoch + 1) % 10 == 0:
+                # 可选：每个epoch保存(不推荐，占用大量磁盘空间)
+                if args.save_every_epoch and (epoch + 1) % 10 == 0:
                     save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_dir)
-                    print(f"   💾 保存检查点: epoch_{epoch}")
+                    print(f"   💾 保存定期检查点: epoch_{epoch}")
                 
                 # 保存训练状态
                 save_training_state(epoch, avg_loss, best_loss, total_time, args.log_dir)
@@ -571,7 +575,7 @@ def main():
         print(f"💾 保存当前状态...")
         try:
             total_time = time.time() - training_start_time
-            save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_dir)
+            save_best_model_only(model, optimizer, epoch, avg_loss, checkpoint_dir)
             save_training_state(epoch, avg_loss, best_loss, total_time, args.log_dir)
             print(f"✅ 状态已保存，可以使用 --auto_resume 继续训练")
         except Exception as save_error:
@@ -581,7 +585,7 @@ def main():
         print(f"💾 保存当前状态...")
         try:
             total_time = time.time() - training_start_time
-            save_checkpoint(model, optimizer, epoch, avg_loss, checkpoint_dir)
+            save_best_model_only(model, optimizer, epoch, avg_loss, checkpoint_dir)
             save_training_state(epoch, avg_loss, best_loss, total_time, args.log_dir)
             print(f"✅ 状态已保存")
         except Exception as save_error:
@@ -591,10 +595,8 @@ def main():
     # 训练完成
     total_training_time = time.time() - training_start_time
     
-    # 保存最终模型
-    final_dir = os.path.join(checkpoint_dir, 'final')
-    os.makedirs(final_dir, exist_ok=True)
-    save_checkpoint(model, optimizer, args.epochs - 1, best_loss, final_dir)
+    # 最终模型已经在best.unet中，不需重复保存
+    print(f"🏆 最佳模型已保存为: {checkpoint_dir}/best.unet")
     
     print("\n" + "=" * 70)
     print("🎉 训练完成！")
@@ -605,7 +607,7 @@ def main():
     print(f"   总训练时间: {total_training_time/3600:.1f}小时")
     print(f"   平均每epoch: {total_training_time/args.epochs/60:.1f}分钟")
     print(f"\n📁 输出文件:")
-    print(f"   检查点: {checkpoint_dir}/")
+    print(f"   最佳模型: {checkpoint_dir}/best.unet")
     print(f"   生成样本: {args.samples_dir}/")
     print(f"   训练日志: {args.log_dir}/")
     print(f"\n🔍 查看训练过程:")
